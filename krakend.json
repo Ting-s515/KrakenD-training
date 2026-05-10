@@ -1,0 +1,66 @@
+{
+  "$schema": "https://www.krakend.io/schema/v2.13/krakend.json",
+  "version": 3,
+  "name": "krakend-training",
+  "port": 8080,
+  "timeout": "3000ms",
+  "cache_ttl": "300s",
+  "endpoints": [
+    {
+      "endpoint": "/users/{id}",
+      "method": "GET",
+      "backend": [
+        {
+          "host": ["http://mock-api:8000"],
+          "url_pattern": "/users/{id}",
+          "encoding": "json"
+        }
+      ]
+    },
+    {
+      "endpoint": "/user-summary/{id}",
+      "method": "GET",
+      "backend": [
+        {
+          "host": ["http://mock-api:8000"],
+          "url_pattern": "/users/{id}",
+          "encoding": "json",
+          "group": "user",
+          "allow": ["id", "name", "email", "company.name"]
+        },
+        {
+          "host": ["http://mock-api:8000"],
+          "url_pattern": "/posts/{id}",
+          "encoding": "json",
+          "group": "post",
+          "allow": ["id", "title"]
+        }
+      ]
+    },
+    {
+      "endpoint": "/limited-users/{id}",
+      "method": "GET",
+      "extra_config": {
+        "qos/ratelimit/router": {
+          "max_rate": 2,
+          "every": "1s",
+          "capacity": 2
+        }
+      },
+      "backend": [
+        {
+          "host": ["http://mock-api:8000"],
+          "url_pattern": "/users/{id}",
+          "encoding": "json",
+          "extra_config": {
+            "qos/ratelimit/proxy": {
+              "max_rate": 1,
+              "every": "1s",
+              "capacity": 1
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

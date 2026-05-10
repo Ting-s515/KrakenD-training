@@ -1,0 +1,26 @@
+services:
+  mock-api:
+    image: ${PYTHON_IMAGE:-python:3.12-slim}
+    working_dir: /app
+    command: ["python", "/app/mock_api.py"]
+    volumes:
+      - ./mock-api:/app:ro
+    ports:
+      - "${MOCK_API_HOST_PORT:-18081}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  krakend:
+    image: ${KRAKEND_IMAGE:-krakend:2.13.4}
+    command: ["run", "-d", "-c", "/etc/krakend/krakend.json"]
+    volumes:
+      - ./krakend.json:/etc/krakend/krakend.json:ro
+    ports:
+      - "${KRAKEND_HOST_PORT:-18000}:8080"
+    depends_on:
+      mock-api:
+        condition: service_healthy

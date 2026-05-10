@@ -1,6 +1,6 @@
 # Lab 02：聚合多個 Backend 並整理回應欄位
 
-目標：建立一個 `/user-summary/{id}` endpoint，讓 KrakenD 同時取得 user 與 post 詳細資料，並控制回應欄位。
+目標：使用課程環境中的 `/user-summary/{id}` endpoint，觀察 KrakenD 如何同時取得 user 與 post 詳細資料，並控制回應欄位。
 
 預估時間：40 分鐘。
 
@@ -9,8 +9,8 @@
 ```mermaid
 flowchart LR
     Client[Client] --> Gateway[KrakenD GET /user-summary/{id}]
-    Gateway --> Users[GET /users/{id}]
-    Gateway --> Post[GET /posts/{id}]
+    Gateway --> Users[mock-api GET /users/{id}]
+    Gateway --> Post[mock-api GET /posts/{id}]
     Users --> Gateway
     Post --> Gateway
     Gateway --> Response[merged JSON response]
@@ -18,50 +18,52 @@ flowchart LR
 
 KrakenD 會用一個對外 endpoint 呼叫兩個 backend。這是 API Gateway 常見的 Backend For Frontend 用法：前端只打一個 API，Gateway 幫你整理多個 upstream。
 
-## Step 1：建立新的 Lab 目錄
+## Step 1：確認共用課程環境已啟動
 
-1. 建立並進入新的操作資料夾：
+1. 確認目前位於 repo 根目錄：
 
 ```powershell
-mkdir krakend-lab-02
-cd krakend-lab-02
+Get-ChildItem docker-compose.yaml, krakend.json
 ```
 
-2. 不要沿用 Lab 01 的 `krakend.json`。
+2. 啟動或確認服務：
 
-說明：本 Lab 需要多 backend 聚合。沿用上一個檔案容易讓你混淆是哪一個 endpoint 在回應。
+```powershell
+docker compose up -d
+docker compose ps
+```
 
-## Step 2：建立聚合 endpoint
+3. 確認 mock backend 有資料：
 
-1. 新增 `krakend.json`。
-2. 貼上以下內容：
+```powershell
+curl http://localhost:18081/users/1
+curl http://localhost:18081/posts/1
+```
+
+說明：本 Lab 沿用 repo 根目錄的 `krakend.json`，不需要新建設定檔。
+
+## Step 2：檢查聚合 endpoint
+
+打開 `krakend.json`，找到 `/user-summary/{id}`：
 
 ```json
 {
-  "$schema": "https://www.krakend.io/schema/v2.13/krakend.json",
-  "version": 3,
-  "name": "krakend-lab-02",
-  "port": 8080,
-  "endpoints": [
+  "endpoint": "/user-summary/{id}",
+  "method": "GET",
+  "backend": [
     {
-      "endpoint": "/user-summary/{id}",
-      "method": "GET",
-      "backend": [
-        {
-          "host": ["https://jsonplaceholder.typicode.com"],
-          "url_pattern": "/users/{id}",
-          "encoding": "json",
-          "group": "user",
-          "allow": ["id", "name", "email", "company.name"]
-        },
-        {
-          "host": ["https://jsonplaceholder.typicode.com"],
-          "url_pattern": "/posts/{id}",
-          "encoding": "json",
-          "group": "post",
-          "allow": ["id", "title"]
-        }
-      ]
+      "host": ["http://mock-api:8000"],
+      "url_pattern": "/users/{id}",
+      "encoding": "json",
+      "group": "user",
+      "allow": ["id", "name", "email", "company.name"]
+    },
+    {
+      "host": ["http://mock-api:8000"],
+      "url_pattern": "/posts/{id}",
+      "encoding": "json",
+      "group": "post",
+      "allow": ["id", "title"]
     }
   ]
 }
@@ -79,24 +81,24 @@ cd krakend-lab-02
 
 說明：`group` 用來避免多個 backend 回應欄位混在同一層。`allow` 只保留指定欄位，讓 Gateway 回應更接近前端需要的資料形狀。
 
-## Step 3：驗證並啟動 Gateway
+## Step 3：驗證並呼叫聚合 API
 
 1. 驗證設定：
 
 ```powershell
-docker run --rm -it -v "${PWD}:/etc/krakend/" krakend check --config krakend.json
+docker compose run --rm --no-deps krakend check --config /etc/krakend/krakend.json
 ```
 
-2. 啟動 Gateway：
+2. 重新載入 KrakenD：
 
 ```powershell
-docker run --rm -p 8080:8080 -v "${PWD}:/etc/krakend/" krakend run -d -c /etc/krakend/krakend.json
+docker compose restart krakend
 ```
 
 3. 呼叫 endpoint：
 
 ```powershell
-curl http://localhost:8080/user-summary/1
+curl http://localhost:18000/user-summary/1
 ```
 
 4. 觀察回應中是否出現 `user` 與 `post` 兩個分組。
@@ -105,12 +107,12 @@ curl http://localhost:8080/user-summary/1
 
 ## Step 4：用 `deny` 移除不想回傳的欄位
 
-1. 保留 Step 2 的設定。
+1. 保留 `/user-summary/{id}` endpoint。
 2. 將第一個 backend 改成以下片段：
 
 ```json
 {
-  "host": ["https://jsonplaceholder.typicode.com"],
+  "host": ["http://mock-api:8000"],
   "url_pattern": "/users/{id}",
   "encoding": "json",
   "group": "user",
@@ -118,12 +120,12 @@ curl http://localhost:8080/user-summary/1
 }
 ```
 
-3. 重新執行 `krakend check`。
-4. 重新啟動 Gateway。
+3. 重新執行 `docker compose run --rm --no-deps krakend check --config /etc/krakend/krakend.json`。
+4. 重新執行 `docker compose restart krakend`。
 5. 再次呼叫：
 
 ```powershell
-curl http://localhost:8080/user-summary/1
+curl http://localhost:18000/user-summary/1
 ```
 
 說明：`allow` 是白名單，`deny` 是黑名單。當你明確知道前端只需要哪些欄位時，優先用 `allow`；當你只想移除少數敏感或不必要欄位時，可以用 `deny`。
@@ -136,9 +138,11 @@ curl http://localhost:8080/user-summary/1
 
 確認方式：
 
-1. 呼叫 `curl http://localhost:8080/user-summary/1`。
-2. 確認 `post` 裡沒有 `body`。
-3. 確認 `post` 裡沒有 `userId`。
+1. 執行 `docker compose run --rm --no-deps krakend check --config /etc/krakend/krakend.json`。
+2. 執行 `docker compose restart krakend`。
+3. 呼叫 `curl http://localhost:18000/user-summary/1`。
+4. 確認 `post` 裡沒有 `body`。
+5. 確認 `post` 裡沒有 `userId`。
 
 ### 練習 2：移除 `group` 觀察回應差異
 
@@ -147,9 +151,11 @@ curl http://localhost:8080/user-summary/1
 確認方式：
 
 1. 重新執行 `krakend check`。
-2. 重新啟動 Gateway。
-3. 呼叫 `curl http://localhost:8080/user-summary/1`。
+2. 重新啟動 KrakenD。
+3. 呼叫 `curl http://localhost:18000/user-summary/1`。
 4. 比較有 `group` 與沒有 `group` 的回應結構。
+
+練習後若要回到後續 Lab 的預設狀態，請把 `krakend.json` 改回原始的 `group` 與 `allow` 設定，再重新執行 `check` 與 `restart`。
 
 ## 完成檢查
 
@@ -163,6 +169,7 @@ curl http://localhost:8080/user-summary/1
 - 回應欄位和預期不同：確認你目前使用的是 `allow` 還是 `deny`。
 - 第二個 backend 沒有資料：確認 `url_pattern` 是 `/posts/{id}`。
 - 回應結構混在一起：確認兩個 backend 是否有設定不同的 `group`。
+- 修改後仍看到舊回應：確認已執行 `docker compose restart krakend`。
 
 ## 本 Lab 的學習重點回顧
 

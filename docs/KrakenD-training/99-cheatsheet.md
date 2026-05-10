@@ -21,10 +21,14 @@
 | 類型 | 指令 | 用途 |
 | --- | --- | --- |
 | 檢查 Docker | `docker --version` | 確認 Docker 可用 |
-| 檢查設定 | `docker run --rm -it -v "${PWD}:/etc/krakend/" krakend check --config krakend.json` | 驗證 `krakend.json` |
-| 啟動 Gateway | `docker run --rm -p 8080:8080 -v "${PWD}:/etc/krakend/" krakend run -d -c /etc/krakend/krakend.json` | 啟動 KrakenD |
-| 健康檢查 | `curl http://localhost:8080/__health` | 確認 Gateway 存活 |
-| 呼叫 endpoint | `curl http://localhost:8080/users/1` | 測試 API 回應 |
+| 檢查 Compose | `docker compose version` | 確認 Docker Compose 可用 |
+| 啟動課程環境 | `docker compose up -d` | 啟動 KrakenD 與 mock backend |
+| 檢查服務 | `docker compose ps` | 確認容器狀態 |
+| 檢查設定 | `docker compose run --rm --no-deps krakend check --config /etc/krakend/krakend.json` | 驗證 `krakend.json` |
+| 重新載入 Gateway | `docker compose restart krakend` | 修改設定後重啟 KrakenD |
+| 健康檢查 | `curl http://localhost:18000/__health` | 確認 Gateway 存活 |
+| 檢查 mock backend | `curl http://localhost:18081/health` | 確認範例 backend 存活 |
+| 呼叫 endpoint | `curl http://localhost:18000/users/1` | 測試 API 回應 |
 
 ## 常見設定位置
 
@@ -49,17 +53,20 @@
 | `404 page not found` | 呼叫的路徑不是已註冊 endpoint | 檢查 `endpoint` 路徑 |
 | 設定沒有生效 | `extra_config` 放錯層級 | 對照 root、endpoint、backend 範圍 |
 | 回應欄位不如預期 | `allow` 或 `deny` 設定錯 | 先移除欄位過濾，再逐步加回 |
-| Docker 掛載失敗 | 執行位置或路徑語法錯誤 | 在 `krakend.json` 所在資料夾執行 |
+| Docker Compose 找不到檔案 | 執行位置錯誤 | 回到 repo 根目錄 |
+| `mock-api` 未就緒 | backend 尚未健康 | 執行 `docker compose ps` 檢查狀態 |
 
 ## 排錯順序
 
-1. 確認目前資料夾有 `krakend.json`。
-2. 執行 `krakend check --config krakend.json`。
-3. 確認 `endpoint` 路徑與實際 curl 路徑一致。
-4. 確認 `host` 可以從你的環境連線。
-5. 確認 `url_pattern` 是否正確帶入路徑參數。
-6. 暫時移除 `allow`、`deny`、`extra_config`，先確認基本代理成功。
-7. 一次只加回一種設定並重新驗證。
+1. 確認目前在 repo 根目錄。
+2. 執行 `docker compose ps`。
+3. 執行 `docker compose run --rm --no-deps krakend check --config /etc/krakend/krakend.json`。
+4. 修改設定後執行 `docker compose restart krakend`。
+5. 確認 `endpoint` 路徑與實際 curl 路徑一致。
+6. 確認 `host` 可以從你的環境連線。
+7. 確認 `url_pattern` 是否正確帶入路徑參數。
+8. 暫時移除 `allow`、`deny`、`extra_config`，先確認基本代理成功。
+9. 一次只加回一種設定並重新驗證。
 
 ## 最小設定範本
 
@@ -74,7 +81,7 @@
       "method": "GET",
       "backend": [
         {
-          "host": ["https://jsonplaceholder.typicode.com"],
+          "host": ["http://mock-api:8000"],
           "url_pattern": "/users/{id}",
           "encoding": "json"
         }
